@@ -1,0 +1,53 @@
+# Reusable SAST stage: called by every NovaPay microservice pipeline.
+name: Reusable SAST Scan
+
+on:
+  workflow_call:
+    inputs:
+      sonar_project_key:
+        required: true
+        type: string
+      min_coverage:
+        required: false
+        type: number
+        default: 80
+    secrets:
+      SONAR_TOKEN:
+        required: true
+      SONAR_HOST_URL:
+        required: true
+
+jobs:
+  sast:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }          # full history for new-code analysis
+      - uses: actions/download-artifact@v4
+        with: { name: jacoco-report, path: build/reports/jacoco/test }
+      - name: SonarQube scan
+        uses: SonarSource/sonarqube-scan-action@v4
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        with:
+          args: >
+            -Dsonar.projectKey=${{ inputs.sonar_project_key }}
+            -Dsonar.coverage.jacoco.xmlReportPaths=build/reports/jacoco/test/jacocoTestReport.xml
+      - name: Quality gate (0 Critical, <=2 High, debt <=5%)
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+      - name: Verify coverage meets minimum
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        run: |
+          COVERAGE=$(curl -s -u "$SONAR_TOKEN:" \
+            "$SONAR_HOST_URL/api/measures/component?component=${{ inputs.sonar_project_key }}&metricKeys=coverage" \
+            | jq -r '.component.measures[0].value')
+          echo "Coverage: ${COVERAGE}% (minimum ${{ inputs.min_coverage }}%)"
+          awk -v c="$COVERAGE" -v m="${{ inputs.min_coverage }}" 'BEGIN { exit (c+0 < m+0) }' \
+            || { echo "::error::Coverage ${COVERAGE}% is below ${{ inputs.min_coverage }}%"; exit 1; }

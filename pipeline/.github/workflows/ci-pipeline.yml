@@ -1,0 +1,291 @@
+# NovaPay CI/CD Pipeline - Deliverable 1 (Stages 1-8)
+# NOTE: copy to <repo-root>/.github/workflows/ to execute.
+# Action versions are pinned; in production pin to full commit SHAs.
+name: NovaPay CI Pipeline
+
+on:
+  push:
+    branches: [main, 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Hotfix and main runs are never cancelled; PR runs are superseded by newer pushes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  REGISTRY: novapay.jfrog.io
+  IMAGE_NAME: novapay-docker/novapay-app
+  JAVA_VERSION: '21'
+
+jobs:
+  # ---------- Stage 1: Source control & trigger ----------
+  verify-commits:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Verify every commit is signed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RANGE_BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+          RANGE_HEAD: ${{ github.sha }}
+        run: ./pipeline/scripts/verify-signed-commits.sh "$RANGE_BASE" "$RANGE_HEAD"
+
+  version:
+    needs: verify-commits
+    runs-on: ubuntu-latest
+    outputs:
+      semver: ${{ steps.v.outputs.semver }}
+      docker_tag: ${{ steps.v.outputs.docker_tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: v
+        name: Compute SemVer + build metadata
+        run: |
+          BASE=$(grep '^version=' gradle.properties | cut -d= -f2)
+          SHA7=${GITHUB_SHA::7}
+          TS=$(date -u +%Y%m%dT%H%MZ)
+          echo "semver=${BASE}+build.${SHA7}.${TS}.${GITHUB_RUN_ID}" >> "$GITHUB_OUTPUT"
+          echo "docker_tag=${BASE}-build.${SHA7}" >> "$GITHUB_OUTPUT"   # '+' is invalid in image tags
+
+  # ---------- Stage 2: Build & compilation ----------
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ env.JAVA_VERSION }}
+          cache: gradle
+      - name: Build, unit test, coverage report
+        run: ./gradlew build test jacocoTestReport --no-daemon
+      - name: Coverage gate (80% line / 70% branch)
+        run: ./pipeline/scripts/check-coverage.sh --min-line 80 --min-branch 70
+      - uses: docker/setup-buildx-action@v3
+      - name: Build image (not pushed until all gates pass)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.version.outputs.docker_tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          outputs: type=docker,dest=/tmp/image.tar
+      - uses: actions/upload-artifact@v4
+        with:
+          name: image-tar
+          path: /tmp/image.tar
+          retention-days: 1
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/jacocoTestReport.xml
+
+  # ---------- Stage 3: SAST (parallel group 1) ----------
+  sast:
+    needs: build
+    uses: ./.github/workflows/reusable-sast.yml
+    with:
+      sonar_project_key: novapay-app
+      min_coverage: 80
+    secrets:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+  # ---------- Stage 4: Dependency & container scan (parallel group 1) ----------
+  dependency-scan:
+    needs: [build, version]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: image-tar, path: /tmp }
+      - name: Trivy image scan - block on CRITICAL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: /tmp/image.tar
+          severity: CRITICAL
+          exit-code: '1'
+          ignore-unfixed: false
+          format: table
+      - name: Trivy image scan - block on HIGH (fix available)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: /tmp/image.tar
+          severity: HIGH
+          exit-code: '1'
+          ignore-unfixed: true
+          format: table
+      - name: Generate SBOM (CycloneDX)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: /tmp/image.tar
+          format: cyclonedx
+          output: sbom.cdx.json
+      - uses: actions/upload-artifact@v4
+        with: { name: sbom, path: sbom.cdx.json }
+
+  license-scan:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: image-tar, path: /tmp }
+      - name: Block GPL / AGPL / SSPL
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          input: /tmp/image.tar
+          scanners: license
+          severity: HIGH,CRITICAL
+          exit-code: '1'
+
+  iac-scan:
+    needs: verify-commits
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Checkov (Terraform, Helm, Kubernetes)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: pipeline
+          framework: terraform,helm,kubernetes
+          soft_fail: false
+
+  # ---------- Stage 5: Integration & contract tests (parallel group 1) ----------
+  integration-tests:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      NAMESPACE: it-${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: gradle }
+      - name: Integration + Pact consumer/provider tests (Testcontainers)
+        run: ./gradlew integrationTest pactVerify --no-daemon
+      - name: Can-I-Deploy (Pact Broker)
+        env:
+          PACT_BROKER_BASE_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        run: pact-broker can-i-deploy --pacticipant novapay-app --version "${GITHUB_SHA}" --to-environment staging
+      - name: Migration test (fresh schema + upgrade from previous release)
+        run: ./gradlew flywayMigrateFresh flywayMigrateUpgrade --no-daemon
+
+  # ---------- Publish + sign (only after all parallel gates pass, main/hotfix only) ----------
+  publish-sign:
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/hotfix/'))
+    needs: [sast, dependency-scan, license-scan, iac-scan, integration-tests, version]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write          # keyless Cosign signing via OIDC
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: image-tar, path: /tmp }
+      - uses: actions/download-artifact@v4
+        with: { name: sbom, path: . }
+      - uses: sigstore/cosign-installer@v3.7.0
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.ARTIFACTORY_USER }}
+          password: ${{ secrets.ARTIFACTORY_TOKEN }}
+      - name: Push, sign, attest
+        run: |
+          docker load -i /tmp/image.tar
+          docker push "$REGISTRY/$IMAGE_NAME:${{ needs.version.outputs.docker_tag }}"
+          docker push "$REGISTRY/$IMAGE_NAME:sha-${GITHUB_SHA}"
+          DIGEST=$(docker inspect --format='{{index .RepoDigests 0}}' "$REGISTRY/$IMAGE_NAME:sha-${GITHUB_SHA}")
+          cosign sign --yes "$DIGEST"
+          cosign attest --yes --type cyclonedx --predicate sbom.cdx.json "$DIGEST"
+
+  # ---------- Staging deploy (GitOps) ----------
+  deploy-staging:
+    needs: [publish-sign, version]
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Promote image tag in GitOps repo (staging values)
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_DEPLOY_TOKEN }}   # separate from developer credentials (RBI 4.3)
+        run: ./pipeline/scripts/gitops-promote.sh staging "${{ needs.version.outputs.docker_tag }}"
+
+  # ---------- Stage 6: DAST + performance (parallel group 2) ----------
+  dast:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: OWASP ZAP API scan
+        uses: zaproxy/action-api-scan@v0.9.0
+        with:
+          target: https://staging.novapay.example/v3/api-docs
+          format: openapi
+          fail_action: true
+          cmd_options: '-a'
+
+  performance:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: k6 load test at 2x expected load (p99 < 500 ms)
+        run: ./pipeline/scripts/run-perf-test.sh --load-factor 2 --p99-ms 500
+
+  # ---------- Stage 7: Policy & compliance gates ----------
+  policy-gate:
+    needs: [dast, performance]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Render manifests
+        run: helm template novapay pipeline/helm/novapay -f pipeline/helm/novapay/values-production.yaml > /tmp/rendered.yaml
+      - name: OPA / Conftest policies
+        run: docker run --rm -v "$PWD:/project" -v /tmp:/tmp openpolicyagent/conftest:v0.56.0 test /tmp/rendered.yaml --policy /project/pipeline/policies
+      - name: Segregation of duties (author != approver != deployer)
+        env:
+          PR_AUTHOR: ${{ github.event.head_commit.author.username || github.actor }}   # TODO: resolve from merged PR via API
+          PR_APPROVER: ${{ vars.LAST_PR_APPROVER }}                                     # TODO: set from PR review API
+        run: ./pipeline/scripts/check-sod.sh
+
+  # ---------- Promotion to pre-prod (Tech Lead approval via Environment) ----------
+  deploy-preprod:
+    needs: policy-gate
+    runs-on: ubuntu-latest
+    environment: pre-prod        # required reviewer: Tech Lead (self-review prevented)
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./pipeline/scripts/gitops-promote.sh pre-prod "${{ needs.version.outputs.docker_tag }}"
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_DEPLOY_TOKEN }}
+
+  # ---------- Stage 8: Deployment & verification ----------
+  deploy-production:
+    needs: deploy-preprod
+    runs-on: ubuntu-latest
+    environment: production      # required reviewers: Release Manager + SRE Lead (dual approval)
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check deployment window (blackout calendar)
+        run: ./pipeline/scripts/check-deploy-window.sh
+      - name: Promote to production (Argo Rollouts canary starts)
+        env:
+          GITOPS_TOKEN: ${{ secrets.GITOPS_DEPLOY_TOKEN }}
+        run: ./pipeline/scripts/gitops-promote.sh production "${{ needs.version.outputs.docker_tag }}"
+      - name: Verify all pods run the same image digest (Knight Capital check)
+        run: ./pipeline/scripts/verify-deployment.sh novapay-prod "$REGISTRY/$IMAGE_NAME:sha-${GITHUB_SHA}"
