@@ -1,0 +1,23 @@
+﻿{
+  "verdict": "rollback",
+  "score": 20.0,
+  "checks": {
+    "latency": {
+      "t": 30.287,
+      "df": 594.3,
+      "p_one_sided": 7.133281684164722e-123,
+      "delta_pct": 33.13,
+      "score": 0
+    },
+    "errors": {
+      "chi2": 922.007,
+      "p_one_sided": 8.069516372142284e-203,
+      "delta_abs": 0.0072,
+      "score": 0
+    },
+    "resources": {
+      "worst_ratio": 1.03,
+      "score": 100
+    }
+  }
+}

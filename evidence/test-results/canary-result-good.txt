@@ -1,0 +1,23 @@
+﻿{
+  "verdict": "promote",
+  "score": 100.0,
+  "checks": {
+    "latency": {
+      "t": -0.555,
+      "df": 583.7,
+      "p_one_sided": 0.7104835371178833,
+      "delta_pct": -0.62,
+      "score": 100
+    },
+    "errors": {
+      "chi2": 0.146,
+      "p_one_sided": 0.3510068117133613,
+      "delta_abs": 7.500000000000003e-05,
+      "score": 100
+    },
+    "resources": {
+      "worst_ratio": 1.03,
+      "score": 100
+    }
+  }
+}
