@@ -1,0 +1,11 @@
+flowchart LR
+  GH[GitHub<br/>commits, PR merge] -->|webhook| EXP
+  AR[Argo Rollouts / ArgoCD<br/>rollout start, 100%, abort] -->|events| EXP
+  RB[Rollback controller] -->|events| EXP
+  INC[Incident tool<br/>detected, resolved] -->|webhook| EXP
+  GATE[Gate audit records] --> EXP
+  EXP[dora-exporter<br/>Prometheus metrics] --> PROM[(Prometheus<br/>recording rules)]
+  PROM --> GRAF[Grafana<br/>3 dashboards]
+  PROM --> AM[Alertmanager<br/>severity routing]
+  AM --> PD[PagerDuty / Slack / Jira]
+  PROM --> AUD[(Audit export<br/>monthly regulator report)]

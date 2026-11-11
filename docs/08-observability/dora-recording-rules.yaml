@@ -1,0 +1,41 @@
+# DORA metric recording rules (Deliverable 8). Inputs are emitted by the dora-exporter, which consumes webhooks from
+# GitHub (commit/PR/merge), Argo Rollouts (production rollout events) and the incident tool (detected/resolved timestamps).
+groups:
+  - name: novapay-dora
+    interval: 1m
+    rules:
+      # 1. Deployment frequency: successful production deployments per day
+      - record: novapay:deployment_frequency:1d
+        expr: sum(increase(novapay_deployments_total{env="production",status="success"}[1d]))
+      # 2. Lead time for changes: first commit of the change -> 100% in production (histogram, seconds)
+      - record: novapay:lead_time_seconds:p50_7d
+        expr: histogram_quantile(0.50, sum by (le) (increase(novapay_lead_time_seconds_bucket{env="production"}[7d])))
+      - record: novapay:lead_time_seconds:p90_7d
+        expr: histogram_quantile(0.90, sum by (le) (increase(novapay_lead_time_seconds_bucket{env="production"}[7d])))
+      # 3. Change failure rate: deployments that caused a rollback, hotfix or incident / all deployments
+      - record: novapay:change_failure_rate:30d
+        expr: |
+          sum(increase(novapay_deployments_failed_total{env="production"}[30d]))
+          / sum(increase(novapay_deployments_total{env="production"}[30d]))
+      # 4. MTTR: incident detection -> resolution (mean seconds)
+      - record: novapay:mttr_seconds:30d
+        expr: |
+          sum(increase(novapay_incident_resolution_seconds_sum[30d]))
+          / sum(increase(novapay_incident_resolution_seconds_count[30d]))
+  - name: novapay-dora-alerts
+    rules:
+      - alert: DoraLeadTimeRegression
+        expr: novapay:lead_time_seconds:p50_7d > 7200
+        for: 1h
+        labels: { severity: warning, sev: SEV4 }
+        annotations: { summary: "Median lead time above the 2-hour project target" }
+      - alert: DoraChangeFailureRateHigh
+        expr: novapay:change_failure_rate:30d > 0.05
+        for: 1h
+        labels: { severity: warning, sev: SEV3 }
+        annotations: { summary: "Change failure rate above the 5% elite threshold" }
+      - alert: DoraMttrAboveTarget
+        expr: novapay:mttr_seconds:30d > 900
+        for: 1h
+        labels: { severity: warning, sev: SEV3 }
+        annotations: { summary: "MTTR above the 15-minute project target" }
