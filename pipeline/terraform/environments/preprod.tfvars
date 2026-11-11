@@ -1,0 +1,5 @@
+environment   = "preprod"
+vpc_cidr      = "10.30.0.0/16"
+azs           = ["ap-south-1a", "ap-south-1b", "ap-south-1c"]
+node_min_size = 3
+node_max_size = 8
