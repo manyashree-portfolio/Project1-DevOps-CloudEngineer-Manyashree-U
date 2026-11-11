@@ -1,0 +1,29 @@
+flowchart LR
+  DEV([Developer commit - signed]) --> S1[Stage 1<br/>Source Control & Trigger]
+  S1 -->|unsigned / no review| X1[/Blocked + notify/]
+  S1 --> S2[Stage 2<br/>Build & Unit Test<br/>80% line / 70% branch]
+  S2 -->|fail| X2[/Blocked + auto-ticket/]
+  subgraph PAR1[Parallel group 1 - on image tarball]
+    S3[Stage 3 SAST<br/>SonarQube]
+    S4[Stage 4 Dependency + Container<br/>Trivy + SBOM + licence]
+    S5[Stage 5 Integration + Contract<br/>Pact + Testcontainers]
+    IAC[IaC scan<br/>Checkov]
+  end
+  S2 --> S3 & S4 & S5 & IAC
+  S3 & S4 & S5 & IAC -->|any fail| X3[/Pipeline blocked<br/>remediation + exception workflow/]
+  S3 & S4 & S5 & IAC --> SIGN[Publish to Artifactory<br/>Cosign sign + SBOM attest]
+  SIGN --> STG[Deploy to STAGING<br/>ArgoCD sync]
+  subgraph PAR2[Parallel group 2 - staging]
+    S6[Stage 6 DAST<br/>OWASP ZAP]
+    PERF[Performance test<br/>p99 < 500 ms at 2x load]
+  end
+  STG --> S6 & PERF
+  S6 & PERF --> S7{Stage 7<br/>Policy & Compliance Gates<br/>OPA / Kyverno / SoD}
+  S7 -->|fail| X4[/Rejected - exception path/]
+  S7 --> A1{{Tech Lead approval}}
+  A1 --> PRE[Deploy to PRE-PROD<br/>UAT + compliance verification]
+  PRE --> A2{{Dual approval<br/>Release Mgr + SRE Lead}}
+  A2 --> S8[Stage 8 Deployment & Verification<br/>Canary 1-2% > 10% > 50% > 100%]
+  S8 -->|Category A/B trigger| RB[(Automated rollback < 2 min)]
+  S8 --> OK([Production stable<br/>24 h bake])
+  RB --> INC[Incident playbook + post-mortem]
