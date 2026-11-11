@@ -1,0 +1,14 @@
+flowchart LR
+  S0[S0 Original schema<br/>email] --> E[EXPAND V2.0<br/>add encrypted_email nullable + index<br/>deploy 1]
+  E --> S1[S1 Expanded schema]
+  S1 --> A1[App V N<br/>dual-write email + encrypted_email<br/>deploy 2]
+  A1 --> M[MIGRATE V2.1<br/>throttled batch backfill 100M rows<br/>idempotent, resumable]
+  M --> V{Verify<br/>0 rows with email and no encrypted_email<br/>sample decrypt check}
+  V -->|fail| M
+  V -->|pass| S2[S2 Migrated schema]
+  S2 --> A2[App V N+1<br/>reads/writes encrypted_email only<br/>deploy 3]
+  A2 --> SOAK[Soak >= 7 days<br/>all services migrated]
+  SOAK --> C[CONTRACT V2.2<br/>rename then drop email<br/>separate deployment + approval gate<br/>FORWARD-ONLY]
+  C --> S3[S3 Contracted schema]
+  E -.->|rollback: drop new column| S0
+  M -.->|rollback: stop job, null new column| S1
