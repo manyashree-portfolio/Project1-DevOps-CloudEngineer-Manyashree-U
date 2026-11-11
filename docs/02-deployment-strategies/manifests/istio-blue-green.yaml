@@ -1,0 +1,45 @@
+# Blue-green traffic switch. The switch is ONE atomic update of this manifest (weights 100/0 <-> 0/100).
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: novapay-app
+  namespace: istio-system
+spec:
+  hosts: ["api.novapay.example"]
+  gateways: ["novapay-gateway"]
+  http:
+    # Smoke-test route: reach the idle (green) environment before it takes live traffic
+    - name: preview
+      match:
+        - headers:
+            x-novapay-preview: { exact: "true" }
+      route:
+        - destination: { host: novapay-app.novapay-prod-green.svc.cluster.local, port: { number: 8080 } }
+    - name: primary
+      route:
+        - destination: { host: novapay-app.novapay-prod-blue.svc.cluster.local, port: { number: 8080 } }
+          weight: 100          # switch step: set blue 0 / green 100
+        - destination: { host: novapay-app.novapay-prod-green.svc.cluster.local, port: { number: 8080 } }
+          weight: 0
+      timeout: 30s
+      retries:
+        attempts: 2
+        perTryTimeout: 10s
+        retryOn: connect-failure,refused-stream   # never retry on 5xx: payment POSTs are not idempotent
+---
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: novapay-app-resilience
+  namespace: novapay-prod-green
+spec:
+  host: novapay-app.novapay-prod-green.svc.cluster.local
+  trafficPolicy:
+    connectionPool:
+      tcp: { maxConnections: 500 }
+      http: { http1MaxPendingRequests: 200, maxRequestsPerConnection: 100 }
+    outlierDetection:            # circuit breaker: eject failing pods
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50

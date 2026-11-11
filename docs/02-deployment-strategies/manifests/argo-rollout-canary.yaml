@@ -1,0 +1,51 @@
+# Canary with Argo Rollouts + Istio traffic routing - STANDARD (compressed) profile.
+# The FULL profile (high-risk changes) overrides steps: 2%/15m, 10%/30m, 50%/60m, 100% + 24h bake (see Helm values).
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: novapay-app
+  namespace: novapay-prod
+spec:
+  replicas: 6
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels: { app: novapay-app }
+  template:
+    metadata:
+      labels: { app: novapay-app }
+    spec:
+      terminationGracePeriodSeconds: 60          # connection draining for in-flight HTTP requests
+      containers:
+        - name: novapay-app
+          image: novapay.jfrog.io/novapay-docker/novapay-app@sha256:REPLACED_BY_PIPELINE   # digest-pinned, never :latest
+          ports: [{ containerPort: 8080 }]
+          readinessProbe: { httpGet: { path: /actuator/health/readiness, port: 8080 }, periodSeconds: 5, failureThreshold: 3 }
+          livenessProbe:  { httpGet: { path: /actuator/health/liveness,  port: 8080 }, periodSeconds: 10, failureThreshold: 3 }
+          lifecycle:
+            preStop: { exec: { command: ["sh", "-c", "sleep 15"] } }   # let the mesh stop routing before shutdown
+          resources:
+            requests: { cpu: 500m, memory: 1Gi }
+            limits:   { cpu: "1",  memory: 1Gi }
+  strategy:
+    canary:
+      stableService: novapay-app-stable
+      canaryService: novapay-app-canary
+      trafficRouting:
+        istio:
+          virtualService: { name: novapay-app, routes: [primary] }
+      analysis:
+        startingStep: 1
+        templates: [{ templateName: novapay-canary-slo }]
+        args:
+          - { name: service, value: novapay-app }
+          - { name: max-error-rate, value: "0.001" }   # phase 1: 0.1%; set 0.0005 for later phases
+          - { name: max-p99-ms, value: "200" }
+      steps:
+        - setWeight: 2
+        - pause: { duration: 10m }
+        - setWeight: 10
+        - pause: { duration: 10m }
+        - setWeight: 50
+        - pause: { duration: 15m }
+        - setWeight: 100
+        - pause: { duration: 5m }

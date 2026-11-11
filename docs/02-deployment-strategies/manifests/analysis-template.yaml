@@ -1,0 +1,45 @@
+# Automated canary analysis. Any failed metric aborts the rollout and Argo returns traffic to the stable ReplicaSet.
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: novapay-canary-slo
+  namespace: novapay-prod
+spec:
+  args:
+    - name: service
+    - name: max-error-rate
+    - name: max-p99-ms
+  metrics:
+    - name: error-rate
+      interval: 1m
+      failureLimit: 1
+      successCondition: result[0] < {{args.max-error-rate}}
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc:9090
+          query: |
+            sum(rate(istio_requests_total{destination_service_name="{{args.service}}-canary",response_code=~"5.."}[2m]))
+            / sum(rate(istio_requests_total{destination_service_name="{{args.service}}-canary"}[2m]))
+    - name: p99-latency-ms
+      interval: 1m
+      failureLimit: 1
+      successCondition: result[0] < {{args.max-p99-ms}}
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc:9090
+          query: |
+            histogram_quantile(0.99, sum(rate(istio_request_duration_milliseconds_bucket{destination_service_name="{{args.service}}-canary"}[2m])) by (le))
+    - name: statistical-comparison     # Welch t-test + chi-squared + composite score (pipeline/scripts/canary_analysis.py)
+      interval: 5m
+      failureLimit: 1
+      provider:
+        job:
+          spec:
+            backoffLimit: 0
+            template:
+              spec:
+                restartPolicy: Never
+                containers:
+                  - name: analysis
+                    image: novapay.jfrog.io/novapay-docker/canary-analysis:1.0.0
+                    command: ["python3", "/app/canary_analysis.py", "--prometheus", "http://prometheus.monitoring.svc:9090", "--service", "{{args.service}}"]
