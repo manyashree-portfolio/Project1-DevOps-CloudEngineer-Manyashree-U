@@ -1,0 +1,39 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: novapay-dev
+  namespace: argocd
+  labels: { novapay.io/environment: dev }
+  annotations:
+    # drift detection: ArgoCD compares Git with the live cluster about every 3 minutes
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: novapay-deployments
+    notifications.argoproj.io/subscribe.on-drift-detected.slack: novapay-deployments
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: novapay-oncall
+spec:
+  project: novapay
+  source:
+    repoURL: https://github.com/novapay/novapay-gitops.git   # fictional org for the scenario
+    targetRevision: main                                      # same branch for every environment
+    path: pipeline/helm/novapay
+    helm:
+      ignoreMissingValueFiles: true
+      valueFiles:
+        - values.yaml            # base, shared by all environments
+        - values-dev.yaml      # environment override
+        # a service override file is added here per service (third layer of the hierarchy)
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: novapay-dev
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - CreateNamespace=false     # namespaces are created by Terraform, with quotas and policies
+      - ApplyOutOfSyncOnly=true
+      - PruneLast=true
+    retry:
+      limit: 3
+      backoff: { duration: 10s, factor: 2, maxDuration: 2m }
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers: [/spec/replicas]    # HPA owns replica count

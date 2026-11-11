@@ -1,0 +1,76 @@
+# AppProject: boundaries + RBAC + the deployment blackout calendar (Part C, SBI YONO case).
+# Sync windows are evaluated by ArgoCD itself, so a blackout cannot be skipped by a pipeline bug.
+# NOTE: a deny window also blocks ArgoCD rollbacks. Emergency rollback therefore uses the
+# break-glass path (Istio weights / kubectl via pipeline/scripts/emergency-rollback.sh), which
+# does not depend on ArgoCD (see docs/06-rollback-specification).
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: novapay
+  namespace: argocd
+spec:
+  description: NovaPay Digital Bank services (4-environment GitOps)
+  sourceRepos:
+    - https://github.com/novapay/novapay-gitops.git   # fictional org for the scenario
+  destinations:
+    - { server: https://kubernetes.default.svc, namespace: "novapay-*" }
+  clusterResourceWhitelist: []        # no cluster-scoped objects from app repos
+  namespaceResourceBlacklist:
+    - { group: "", kind: ResourceQuota }
+    - { group: "", kind: LimitRange }
+  roles:
+    - name: release-manager
+      description: May sync pre-prod/production (still needs the pipeline's dual approval record)
+      policies:
+        - p, proj:novapay:release-manager, applications, sync, novapay/*, allow
+        - p, proj:novapay:release-manager, applications, get, novapay/*, allow
+      groups: ["novapay:release-managers"]
+    - name: developer
+      description: Read-only everywhere, sync dev only
+      policies:
+        - p, proj:novapay:developer, applications, get, novapay/*, allow
+        - p, proj:novapay:developer, applications, sync, novapay/novapay-dev, allow
+      groups: ["novapay:developers"]
+  syncWindows:
+    # --- Production blackout calendar (IST) -------------------------------------------
+    - kind: deny            # daily UPI peak, morning
+      schedule: "0 10 * * *"
+      duration: 2h
+      timeZone: Asia/Kolkata
+      applications: ["novapay-production"]
+      manualSync: false
+    - kind: deny            # daily UPI peak, evening (5 PM to 8 PM)
+      schedule: "0 17 * * *"
+      duration: 3h
+      timeZone: Asia/Kolkata
+      applications: ["novapay-production"]
+      manualSync: false
+    - kind: deny            # salary days: 1st, 7th, 15th (whole day)
+      schedule: "0 0 1,7,15 * *"
+      duration: 24h
+      timeZone: Asia/Kolkata
+      applications: ["novapay-production", "novapay-preprod"]
+      manualSync: false
+    - kind: deny            # month-end processing, 28th to 31st
+      schedule: "0 0 28 * *"
+      duration: 96h
+      timeZone: Asia/Kolkata
+      applications: ["novapay-production"]
+      manualSync: false
+    - kind: deny            # Fridays after 14:00 IST (no Friday-evening releases; see incident simulation)
+      schedule: "0 14 * * 5"
+      duration: 34h         # until Saturday midnight; Saturday/Sunday also low-staffed
+      timeZone: Asia/Kolkata
+      applications: ["novapay-production"]
+      manualSync: false
+    # --- Festival / RBI settlement / filing / campaign windows --------------------------
+    # Dates move every year, so they are maintained as dated entries, reviewed each quarter by
+    # Compliance + Release Manager. Add one deny window per event, for example:
+    #
+    # - kind: deny
+    #   schedule: "0 0 <day> <month> *"
+    #   duration: 72h
+    #   timeZone: Asia/Kolkata
+    #   applications: ["novapay-production"]
+    #   manualSync: false
+    #   # reason: <festival | RBI settlement window | regulatory filing deadline | marketing campaign>

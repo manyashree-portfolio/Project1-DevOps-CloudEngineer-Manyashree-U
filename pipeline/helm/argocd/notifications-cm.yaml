@@ -1,0 +1,25 @@
+# Drift and failure notifications (Slack). Token comes from a Secret, never from Git.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: argocd-notifications-cm
+  namespace: argocd
+data:
+  service.slack: |
+    token: $slack-token
+  trigger.on-drift-detected: |
+    - when: app.status.sync.status == 'OutOfSync'
+      oncePer: app.status.sync.revision
+      send: [drift-message]
+  trigger.on-sync-failed: |
+    - when: app.status.operationState.phase in ['Error', 'Failed']
+      send: [sync-failed-message]
+  trigger.on-health-degraded: |
+    - when: app.status.health.status == 'Degraded'
+      send: [health-message]
+  template.drift-message: |
+    message: "{{.app.metadata.name}} drifted from Git (live cluster differs from declared state). Revision {{.app.status.sync.revision}}."
+  template.sync-failed-message: |
+    message: "Sync failed for {{.app.metadata.name}}: {{.app.status.operationState.message}}"
+  template.health-message: |
+    message: "{{.app.metadata.name}} health is Degraded. Check the Engineering dashboard and the incident playbook."
