@@ -1,0 +1,108 @@
+# Prometheus alerting + recording rules for automated rollback (Deliverable 6).
+# Category A (< 60 s, automatic, no human) | Category B (< 15 min, page then auto-rollback) | Category C (human decision, no auto action)
+# Metric sources: Istio (istio_requests_total, istio_request_duration_milliseconds_bucket), kube-state-metrics, cAdvisor,
+# blackbox exporter (probe_success), HikariCP (hikaricp_*), application business metric (novapay_payment_success_ratio).
+groups:
+  - name: novapay-recording
+    interval: 30s
+    rules:
+      - record: novapay:error_ratio:1m
+        expr: |
+          sum(rate(istio_requests_total{destination_service_name="novapay-app",response_code=~"5.."}[1m]))
+          / sum(rate(istio_requests_total{destination_service_name="novapay-app"}[1m]))
+      - record: novapay:error_ratio:5m
+        expr: |
+          sum(rate(istio_requests_total{destination_service_name="novapay-app",response_code=~"5.."}[5m]))
+          / sum(rate(istio_requests_total{destination_service_name="novapay-app"}[5m]))
+      - record: novapay:error_ratio:30m
+        expr: |
+          sum(rate(istio_requests_total{destination_service_name="novapay-app",response_code=~"5.."}[30m]))
+          / sum(rate(istio_requests_total{destination_service_name="novapay-app"}[30m]))
+      - record: novapay:p99_ms:5m
+        expr: |
+          histogram_quantile(0.99, sum by (le) (rate(istio_request_duration_milliseconds_bucket{destination_service_name="novapay-app"}[5m])))
+      - record: novapay:p99_ms:baseline_7d
+        expr: avg_over_time(novapay:p99_ms:5m[7d])
+      - record: novapay:payment_success_ratio:baseline_7d
+        expr: avg_over_time(novapay_payment_success_ratio[7d])
+
+  - name: novapay-rollback-category-a
+    rules:
+      - alert: CatA_HighHttp5xxRate
+        expr: novapay:error_ratio:1m > 0.05
+        for: 1m
+        labels: { severity: critical, category: A, action: auto_rollback, sev: SEV1 }
+        annotations:
+          summary: "HTTP 5xx above 5% for 60 s"
+          runbook: "runbooks/incident-playbook.md#scenario-a-bad-deployment"
+      - alert: CatA_HealthCheckFailing
+        # probe every 10 s: 30 s of all-failed samples = 3 consecutive failures
+        expr: min_over_time(probe_success{job="novapay-health"}[30s]) == 0
+        for: 0m
+        labels: { severity: critical, category: A, action: auto_rollback, sev: SEV1 }
+        annotations: { summary: "3 consecutive health-check failures" }
+      - alert: CatA_OOMKilled
+        expr: |
+          increase(kube_pod_container_status_restarts_total{namespace="novapay-prod"}[2m]) > 0
+          and on (namespace, pod, container)
+          kube_pod_container_status_last_terminated_reason{namespace="novapay-prod",reason="OOMKilled"} == 1
+        for: 0m
+        labels: { severity: critical, category: A, action: auto_rollback, sev: SEV1 }
+        annotations: { summary: "Container OOM-killed in production" }
+      - alert: CatA_CrashLoopBackOff
+        expr: kube_pod_container_status_waiting_reason{namespace="novapay-prod",reason="CrashLoopBackOff"} == 1
+        for: 30s
+        labels: { severity: critical, category: A, action: auto_rollback, sev: SEV1 }
+        annotations: { summary: "Pod in CrashLoopBackOff" }
+      - alert: CatA_DbConnectionPoolExhaustion
+        expr: sum(hikaricp_connections_pending{application="novapay-app"}) > 10
+        for: 30s
+        labels: { severity: critical, category: A, action: auto_rollback, sev: SEV1 }
+        annotations: { summary: "Database connection pool exhausted (pending > 10 for 30 s)" }
+
+  - name: novapay-rollback-category-b
+    rules:
+      - alert: CatB_LatencyP99Degraded
+        expr: novapay:p99_ms:5m > 2 * novapay:p99_ms:baseline_7d
+        for: 5m
+        labels: { severity: high, category: B, action: page_then_auto_rollback, ack_window: 10m, sev: SEV2 }
+        annotations: { summary: "p99 latency above 2x the 7-day baseline for 5 min" }
+      - alert: CatB_ErrorBudgetBurn
+        # SLO 99.99% request success -> budget 0.01%; burn rate = error_ratio / 0.0001; fire at > 10x on short AND long window
+        expr: (novapay:error_ratio:5m / 0.0001 > 10) and (novapay:error_ratio:30m / 0.0001 > 10)
+        for: 2m
+        labels: { severity: high, category: B, action: page_then_auto_rollback, ack_window: 10m, sev: SEV2 }
+        annotations: { summary: "Error-budget burn rate above 10x" }
+      - alert: CatB_TransactionSuccessDrop
+        expr: avg_over_time(novapay_payment_success_ratio[5m]) < (novapay:payment_success_ratio:baseline_7d - 0.02)
+        for: 3m
+        labels: { severity: high, category: B, action: page_then_auto_rollback, ack_window: 10m, sev: SEV2 }
+        annotations: { summary: "Payment success rate more than 2 percentage points below baseline" }
+      - alert: CatB_ResourceSaturation
+        expr: |
+          (
+            sum by (pod) (rate(container_cpu_usage_seconds_total{namespace="novapay-prod",container="novapay-app"}[5m]))
+            / sum by (pod) (kube_pod_container_resource_limits{namespace="novapay-prod",container="novapay-app",resource="cpu"}) > 0.90
+          ) or (
+            sum by (pod) (container_memory_working_set_bytes{namespace="novapay-prod",container="novapay-app"})
+            / sum by (pod) (kube_pod_container_resource_limits{namespace="novapay-prod",container="novapay-app",resource="memory"}) > 0.85
+          )
+        for: 5m
+        labels: { severity: high, category: B, action: page_then_auto_rollback, ack_window: 10m, sev: SEV2 }
+        annotations: { summary: "CPU > 90% or memory > 85% sustained 5 min" }
+
+  - name: novapay-rollback-category-c
+    rules:
+      - alert: CatC_GradualLatencyDrift
+        # below Category B thresholds but trending worse for hours -> human judgement
+        expr: novapay:p99_ms:5m > 1.3 * novapay:p99_ms:baseline_7d
+        for: 30m
+        labels: { severity: warning, category: C, action: notify_only, sev: SEV3 }
+        annotations: { summary: "p99 30% above baseline for 30 min - consider rollback" }
+      - alert: CatC_DownstreamDependencyCorrelation
+        expr: |
+          sum(rate(istio_requests_total{destination_service_name="payment-gateway-adapter",response_code=~"5.."}[10m]))
+          / sum(rate(istio_requests_total{destination_service_name="payment-gateway-adapter"}[10m])) > 0.10
+        for: 10m
+        labels: { severity: warning, category: C, action: notify_only, sev: SEV3 }
+        annotations: { summary: "Downstream gateway failures correlated with recent release - human decision" }
