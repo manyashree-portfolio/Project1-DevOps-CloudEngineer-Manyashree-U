@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: novapay-app }
+spec:
+  template:
+    spec:
+      securityContext: { runAsNonRoot: true }
+      containers:
+        - name: app
+          image: novapay.jfrog.io/novapay-docker/novapay-app:2.4.1-build.a1b2c3d
+          securityContext: { allowPrivilegeEscalation: false }
+          resources: { limits: { cpu: "1", memory: 1Gi } }

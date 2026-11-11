@@ -1,0 +1,41 @@
+# Admission control: reject unsigned images and images without an SBOM attestation (supply-chain chain of trust).
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: novapay-verify-signed-images
+  annotations:
+    policies.kyverno.io/title: Verify Cosign signature and SBOM attestation
+    novapay/regulatory-refs: "RBI 4.2, 7.2; PCI-DSS 6.3, 6.5"
+spec:
+  validationFailureAction: Enforce
+  background: false
+  webhookTimeoutSeconds: 30
+  rules:
+    - name: verify-cosign-signature
+      match:
+        any:
+          - resources: { kinds: [Pod] }
+      verifyImages:
+        - imageReferences: ["novapay.jfrog.io/novapay-docker/*"]
+          mutateDigest: true
+          verifyDigest: true
+          required: true
+          attestors:
+            - entries:
+                - keyless:
+                    issuer: https://token.actions.githubusercontent.com
+                    subject: "https://github.com/novapay/*/.github/workflows/ci-pipeline.yml@refs/heads/*"
+                    rekor: { url: https://rekor.sigstore.dev }
+    - name: require-sbom-attestation
+      match:
+        any:
+          - resources: { kinds: [Pod] }
+      verifyImages:
+        - imageReferences: ["novapay.jfrog.io/novapay-docker/*"]
+          attestations:
+            - type: https://cyclonedx.org/bom
+              attestors:
+                - entries:
+                    - keyless:
+                        issuer: https://token.actions.githubusercontent.com
+                        subject: "https://github.com/novapay/*/.github/workflows/ci-pipeline.yml@refs/heads/*"

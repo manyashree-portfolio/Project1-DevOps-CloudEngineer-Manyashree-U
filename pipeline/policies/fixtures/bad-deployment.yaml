@@ -1,0 +1,11 @@
+# Intentionally violates 5 policies - used to demonstrate that the gate blocks (evidence/test-results)
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: bad-app }
+spec:
+  template:
+    spec:
+      containers:
+        - name: app
+          image: docker.io/library/nginx:latest
+          securityContext: { privileged: true }
