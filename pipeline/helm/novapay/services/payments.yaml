@@ -1,0 +1,4 @@
+# SERVICE override (third layer): payments needs a long drain window for settlement jobs
+terminationGracePeriodSeconds: 300
+resources:
+  limits: { cpu: "2", memory: 3Gi }

@@ -1,0 +1,5 @@
+replicaCount: 2
+config: { logLevel: INFO, dataProfile: anonymised, paymentGateway: sandbox }
+featureFlags:
+  newPaymentRouting: { enabled: true, rolloutPercent: 100 }   # staging mirrors the state we intend for production
+  upiCollectV2:      { enabled: true, rolloutPercent: 100 }

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: novapay
+description: NovaPay Digital Bank microservice chart (templates added in the IaC batch)
+type: application
+version: 0.1.0
+appVersion: "2.4.1"

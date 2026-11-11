@@ -1,0 +1,14 @@
+replicaCount: 6
+config: { logLevel: INFO, dataProfile: production, paymentGateway: live }
+resources:
+  requests: { cpu: "1", memory: 2Gi }
+  limits:   { cpu: "2", memory: 2Gi }
+autoscaling:
+  enabled: true
+  minReplicas: 6
+  maxReplicas: 24
+  targetCPUUtilizationPercentage: 70      # matches the autoscaling trigger in the blackout-calendar design
+podDisruptionBudget: { minAvailable: 4 }
+featureFlags:                              # new features ship dark; raised 1% > 10% > 50% > 100% through the pipeline
+  newPaymentRouting: { enabled: false, rolloutPercent: 0 }
+  upiCollectV2:      { enabled: false, rolloutPercent: 0 }

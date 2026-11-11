@@ -1,0 +1,8 @@
+replicaCount: 4
+config: { logLevel: INFO, dataProfile: masked, paymentGateway: sandbox }
+resources:
+  requests: { cpu: "1", memory: 2Gi }
+  limits:   { cpu: "2", memory: 2Gi }
+featureFlags:
+  newPaymentRouting: { enabled: true, rolloutPercent: 100 }
+  upiCollectV2:      { enabled: true, rolloutPercent: 10 }

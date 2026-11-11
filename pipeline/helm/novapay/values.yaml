@@ -1,0 +1,31 @@
+# BASE configuration - shared by ALL environments. Environment files override; service files override per service.
+# Principle: same artefact, different config. The image digest is injected by the pipeline, identical in every environment.
+image:
+  repository: novapay.jfrog.io/novapay-docker/novapay-app
+  digest: ""                 # sha256:... set by gitops-promote.sh; never a mutable tag
+replicaCount: 2
+resources:
+  requests: { cpu: 500m, memory: 1Gi }
+  limits:   { cpu: "1",  memory: 1Gi }
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+probes:
+  readinessPath: /actuator/health/readiness
+  livenessPath: /actuator/health/liveness
+istio:
+  mtls: STRICT
+  tlsMinVersion: TLSV1_3
+config:                      # non-secret settings only
+  logLevel: INFO
+  dataProfile: synthetic
+  paymentGateway: sandbox
+secrets:                     # REFERENCES only - values live in Vault / AWS Secrets Manager (External Secrets Operator)
+  database: { secretRef: novapay/db, rotationDays: 90 }
+  apiKeys:  { secretRef: novapay/api-keys, rotationDays: 30 }
+featureFlags:                # environment-aware toggles; production defaults to OFF
+  newPaymentRouting: { enabled: false, rolloutPercent: 0 }
+  upiCollectV2:      { enabled: false, rolloutPercent: 0 }
+autoscaling:
+  enabled: false
