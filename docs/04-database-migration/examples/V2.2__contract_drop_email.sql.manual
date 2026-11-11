@@ -1,0 +1,14 @@
+-- CONTRACT phase: FORWARD-ONLY. Deliberately named *.manual so Flyway never auto-runs it.
+-- Preconditions (all enforced by the approval gate): every service runs app V(N+1); soak >= 7 days;
+-- verification query returns 0; fresh backup + PITR window confirmed; DBA + Tech Lead + CAB approval.
+SET lock_timeout = '3s';
+
+-- Step 1 (soft contract): rename first - if something still reads "email" it fails loudly and the rename can be undone
+ALTER TABLE customer_profiles RENAME COLUMN email TO email_deprecated;
+-- ... observe for the agreed period (e.g. 7 days) ...
+
+-- Step 2 (irreversible): drop
+-- ALTER TABLE customer_profiles DROP COLUMN email_deprecated;
+
+INSERT INTO schema_audit_log (migration_id, description, executed_by, phase)
+VALUES ('V2.2', 'Contract: retire plaintext email column', current_user, 'CONTRACT');

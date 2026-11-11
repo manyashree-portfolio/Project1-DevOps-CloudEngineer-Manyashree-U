@@ -1,0 +1,24 @@
+# Prometheus rules that auto-abort the backfill (runner watches these via Alertmanager webhook -> pauses job + pages the DBA)
+groups:
+  - name: novapay-migration-guard
+    rules:
+      - alert: MigrationQueryLatencyRegression
+        expr: |
+          histogram_quantile(0.95, sum(rate(pg_query_duration_seconds_bucket{db="novapay"}[2m])) by (le))
+          > 1.20 * histogram_quantile(0.95, sum(rate(pg_query_duration_seconds_bucket{db="novapay"}[2m] offset 1d)) by (le))
+        for: 2m
+        labels: { severity: critical, action: abort-migration }
+        annotations: { summary: "Query latency > 20% above baseline during migration - abort and alert DBA" }
+      - alert: MigrationReplicationLag
+        expr: max(pg_replication_lag_seconds{db="novapay"}) > 5
+        for: 1m
+        labels: { severity: warning, action: pause-migration }
+        annotations: { summary: "Replica lag above 5 s - pause backfill and increase throttle" }
+      - alert: MigrationLockWaits
+        expr: sum(pg_locks_waiting{db="novapay"}) > 10
+        for: 1m
+        labels: { severity: warning, action: pause-migration }
+      - alert: MigrationDiskOrWal
+        expr: pg_wal_directory_free_ratio{db="novapay"} < 0.20
+        for: 1m
+        labels: { severity: critical, action: abort-migration }
