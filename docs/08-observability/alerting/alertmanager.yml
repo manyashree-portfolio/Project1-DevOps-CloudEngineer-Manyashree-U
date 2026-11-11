@@ -1,0 +1,80 @@
+# Severity-based routing and escalation (Deliverable 8). Secrets are read from files mounted from Vault, never inline.
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: slack-observability            # default: low-severity noise goes to a channel, nobody is paged
+  group_by: [alertname, category, sev]
+  group_wait: 10s
+  group_interval: 1m
+  repeat_interval: 4h
+  routes:
+    # SEV-1 / Category A: automatic rollback + page everyone on the escalation path (CTO + CISO + VP Eng)
+    - matchers: [ 'sev="SEV1"' ]
+      receiver: pagerduty-sev1
+      group_wait: 0s
+      repeat_interval: 30m                  # SEV-1 updates every 30 min
+      continue: true
+      routes:
+        - matchers: [ 'action="auto_rollback"' ]
+          receiver: rollback-controller
+          continue: true
+        - receiver: slack-incidents
+    # SEV-2 / Category B: page on-call + SRE Lead; rollback controller starts its 10-minute acknowledgement timer
+    - matchers: [ 'sev="SEV2"' ]
+      receiver: pagerduty-sev2
+      group_wait: 10s
+      repeat_interval: 1h                   # hourly updates
+      continue: true
+      routes:
+        - matchers: [ 'action="page_then_auto_rollback"' ]
+          receiver: rollback-controller
+          continue: true
+        - receiver: slack-incidents
+    # SEV-3 / Category C: SRE on-call + Tech Lead during working hours, no auto action
+    - matchers: [ 'sev="SEV3"' ]
+      receiver: slack-incidents
+      repeat_interval: 4h
+    # SEV-4: ticket only (next business day)
+    - matchers: [ 'sev="SEV4"' ]
+      receiver: jira-ticket
+
+inhibit_rules:
+  # a Category A alert (already rolling back) silences the noisier B/C alerts for the same service
+  - source_matchers: [ 'category="A"' ]
+    target_matchers: [ 'category=~"B|C"' ]
+    equal: [ namespace ]
+  # SEV-1 inhibits SEV-3/4 duplicates
+  - source_matchers: [ 'sev="SEV1"' ]
+    target_matchers: [ 'sev=~"SEV3|SEV4"' ]
+    equal: [ namespace ]
+
+receivers:
+  - name: slack-observability
+    slack_configs:
+      - channel: '#novapay-observability'
+        api_url_file: /etc/alertmanager/secrets/slack-webhook
+        send_resolved: true
+  - name: slack-incidents
+    slack_configs:
+      - channel: '#novapay-incidents'
+        api_url_file: /etc/alertmanager/secrets/slack-webhook
+        send_resolved: true
+        title: '[{{ .CommonLabels.sev }}] {{ .CommonLabels.alertname }}'
+        text: '{{ .CommonAnnotations.summary }}  Runbook: {{ .CommonAnnotations.runbook }}'
+  - name: pagerduty-sev1                     # escalation policy: on-call SRE -> SRE Lead -> CTO + CISO + VP Eng
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-sev1-key
+        severity: critical
+  - name: pagerduty-sev2                     # escalation policy: on-call SRE -> VP Eng + SRE Lead
+    pagerduty_configs:
+      - routing_key_file: /etc/alertmanager/secrets/pagerduty-sev2-key
+        severity: error
+  - name: rollback-controller
+    webhook_configs:
+      - url: http://rollback-controller.novapay-ops.svc:8080/alerts
+        send_resolved: false
+        max_alerts: 20
+  - name: jira-ticket
+    webhook_configs:
+      - url: http://jira-bridge.novapay-ops.svc:8080/ticket
