@@ -1,0 +1,31 @@
+flowchart TB
+  C([Commit / PR]) --> G0[Gate 0: signed commits + PR review]
+  G0 --> B[Build + unit tests]
+  B --> PAR
+  subgraph PAR[Parallel gates on the built image]
+    G1[G1 SAST - SonarQube]
+    G3[G3 Dependency - Trivy + SBOM]
+    G4[G4 Licence - Trivy/FOSSA]
+    G6[G6 Infra - Checkov]
+  end
+  PAR -->|all pass| G8[G8 Sign image - Cosign + SBOM attestation]
+  G8 --> STG[Deploy staging]
+  STG --> G2[G2 DAST - OWASP ZAP]
+  G2 --> G5[G5 K8s policy - OPA/Conftest]
+  G5 --> G7[G7 Segregation of duties + approvals]
+  G7 --> ADM[Admission: Kyverno verifies signature + SBOM]
+  ADM --> PROD([Deploy])
+  PAR -->|fail| F
+  G2 -->|fail| F
+  G5 -->|fail| F
+  G7 -->|fail| F
+  F[/Pipeline blocked<br/>+ remediation guidance + auto-ticket/] --> X{Exception<br/>requested?}
+  X -->|no| FIX[Fix and re-run]
+  X -->|yes| WF[Exception workflow<br/>approval by gate owner<br/>time-bound, auto-expiry]
+  WF -->|approved| RETRY[Re-run gate with exception id]
+  RETRY --> PAR
+  G1 -.-> AUD[(Immutable audit store<br/>JSON per gate - WORM)]
+  G2 -.-> AUD
+  G3 -.-> AUD
+  G5 -.-> AUD
+  G7 -.-> AUD
