@@ -1,0 +1,17 @@
+flowchart TB
+  T([Alert fires]) --> D1[1 DETECT<br/>Prometheus rule, 30 s evaluation]
+  D1 --> D2[2 CORRELATE<br/>match to deploy event<br/>novapay_deploy_info, Argo revision]
+  D2 --> CAT{Trigger category}
+  CAT -->|A immediate| F3
+  CAT -->|B escalated| PG[Page on-call<br/>ack window 10 min]
+  PG -->|acknowledged: human decides| HD{Roll back?}
+  PG -->|no ack in 10 min| F3
+  HD -->|yes| F3
+  HD -->|no: fix forward| MON[Monitor + keep paging]
+  CAT -->|C manual| HD
+  F3[3 FREEZE<br/>block promotions, pause auto-sync] --> R4[4 ROLLBACK<br/>canary abort or VirtualService revert < 60 s]
+  R4 --> V5[5 VERIFY<br/>smoke tests, metrics vs baseline, image hash check]
+  V5 -->|fail| ESC[Escalate SEV1<br/>SRE Lead + CTO]
+  V5 -->|pass| N6[6 NOTIFY<br/>comms templates, status page]
+  N6 --> I7[7 INCIDENT<br/>open record, classify SEV]
+  I7 --> P8[8 POSTMORTEM<br/>blameless, action items tracked]
