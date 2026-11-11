@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "novapay.fullname" . }}
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ default "66%" (default dict .Values.pdb).minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "novapay.selectorLabels" . | nindent 6 }}

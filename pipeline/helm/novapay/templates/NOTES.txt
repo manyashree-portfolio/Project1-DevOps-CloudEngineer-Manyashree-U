@@ -1,0 +1,3 @@
+NovaPay {{ .Chart.AppVersion }} deployed to environment "{{ default "dev" .Values.environment }}".
+Image: {{ include "novapay.image" . }}
+Check rollout:  kubectl rollout status deploy/{{ include "novapay.fullname" . }} -n {{ .Release.Namespace }}

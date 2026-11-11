@@ -1,0 +1,40 @@
+{{- $np := default dict .Values.networkPolicy }}
+{{- if (ne (toString $np.enabled) "false") }}
+# Default-deny, then allow only what the service needs (PCI-DSS network segmentation intent).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "novapay.fullname" . }}
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "novapay.selectorLabels" . | nindent 6 }}
+  policyTypes: [Ingress, Egress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ default "istio-system" $np.ingressNamespace }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ default "monitoring" $np.monitoringNamespace }}
+      ports:
+        - port: {{ default 8080 (default dict .Values.service).port }}
+  egress:
+    - to:   # DNS
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels: { k8s-app: kube-dns }
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - to:   # shared data layer (PostgreSQL via pgBouncer, Redis, RabbitMQ)
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ default "novapay-shared" $np.sharedNamespace }}
+    {{- range $np.extraEgressCIDRs }}
+    - to:   # e.g. payment gateway egress range, set per environment
+        - ipBlock: { cidr: {{ . | quote }} }
+      ports: [{ port: 443 }]
+    {{- end }}
+{{- end }}

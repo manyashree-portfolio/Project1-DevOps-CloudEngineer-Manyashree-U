@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "novapay.fullname" . }}-config
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+data:
+  {{- range $k, $v := (default dict .Values.config) }}
+  {{ $k }}: {{ $v | quote }}
+  {{- end }}

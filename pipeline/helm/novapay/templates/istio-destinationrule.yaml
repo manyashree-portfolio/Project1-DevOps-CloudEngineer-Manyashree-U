@@ -1,0 +1,26 @@
+{{- $i := default dict .Values.istio }}
+{{- if $i.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: DestinationRule
+metadata:
+  name: {{ include "novapay.fullname" . }}
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+spec:
+  host: {{ include "novapay.fullname" . }}
+  trafficPolicy:
+    tls:
+      mode: ISTIO_MUTUAL            # mTLS in the mesh (TLS 1.3 policy is enforced at the gateway)
+    connectionPool:
+      http: { http1MaxPendingRequests: 100, maxRequestsPerConnection: 100 }
+    outlierDetection:               # circuit breaker: eject failing pods automatically
+      consecutive5xxErrors: 5
+      interval: 10s
+      baseEjectionTime: 30s
+      maxEjectionPercent: 50
+  subsets:
+    - name: stable
+      labels: { version: {{ default .Chart.AppVersion $i.stableVersion | quote }} }
+    - name: canary
+      labels: { version: {{ default "canary" $i.canaryVersion | quote }} }
+{{- end }}

@@ -1,0 +1,26 @@
+{{- $i := default dict .Values.istio }}
+{{- if $i.enabled }}
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: {{ include "novapay.fullname" . }}
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+spec:
+  hosts: [{{ default (include "novapay.fullname" .) $i.host | quote }}]
+  {{- if $i.gateway }}
+  gateways: [{{ $i.gateway | quote }}]
+  {{- end }}
+  http:
+    - name: primary
+      route:
+        - destination: { host: {{ include "novapay.fullname" . }}, subset: stable }
+          weight: {{ sub 100 (int (default 0 $i.canaryWeight)) }}
+        - destination: { host: {{ include "novapay.fullname" . }}, subset: canary }
+          weight: {{ int (default 0 $i.canaryWeight) }}
+      timeout: {{ default "10s" $i.timeout }}
+      retries:
+        attempts: 2
+        perTryTimeout: 4s
+        retryOn: connect-failure,refused-stream,503
+{{- end }}

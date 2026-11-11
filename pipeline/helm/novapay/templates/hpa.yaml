@@ -1,0 +1,40 @@
+{{- $a := default dict .Values.autoscaling }}
+{{- if $a.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "novapay.fullname" . }}
+  labels:
+    {{- include "novapay.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "novapay.fullname" . }}
+  minReplicas: {{ default 3 $a.minReplicas }}
+  maxReplicas: {{ default 12 $a.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ default 70 $a.targetCPUUtilization }}
+    {{- if $a.queueDepthTarget }}
+    # custom metric (needs prometheus-adapter or KEDA): RabbitMQ queue depth per pod
+    - type: Pods
+      pods:
+        metric:
+          name: rabbitmq_queue_messages_ready
+        target:
+          type: AverageValue
+          averageValue: {{ $a.queueDepthTarget | quote }}
+    {{- end }}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - { type: Percent, value: 100, periodSeconds: 30 }
+    scaleDown:
+      stabilizationWindowSeconds: 300
+{{- end }}
