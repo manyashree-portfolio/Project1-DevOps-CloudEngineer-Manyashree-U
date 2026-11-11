@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 932 932" font-family="Arial,Helvetica,sans-serif">
+<rect width="932" height="932" fill="#ffffff"/>
+<text x="10" y="26" font-size="20" font-weight="bold" fill="#111">NovaPay - Engineering (real-time ops)</text>
+<text x="10" y="46" font-size="12" fill="#555">Wireframe - audience: SRE / on-call, refresh 30 s</text>
+<rect x="10" y="60" width="298" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="18" y="78" font-size="12" font-weight="bold" fill="#111">Error ratio (1 m)</text>
+<text x="18" y="312" font-size="10" fill="#555">[timeseries] percentunit</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="20,290 99.39999999999999,203.0 159.0,229.0 233.5,164.0 298,190.0"/>
+<rect x="314" y="60" width="298" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="322" y="78" font-size="12" font-weight="bold" fill="#111">p99 latency vs 7-day baseline</text>
+<text x="322" y="312" font-size="10" fill="#555">[timeseries] ms</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="324,290 403.4,203.0 463.0,229.0 537.5,164.0 602,190.0"/>
+<rect x="618" y="60" width="298" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="626" y="78" font-size="12" font-weight="bold" fill="#111">Payment success ratio</text>
+<text x="626" y="312" font-size="10" fill="#555">[timeseries] percentunit</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="628,290 707.4,203.0 767.0,229.0 841.5,164.0 906,190.0"/>
+<rect x="10" y="326" width="298" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="18" y="344" font-size="12" font-weight="bold" fill="#111">Traffic by version (canary split)</text>
+<text x="18" y="578" font-size="10" fill="#555">[timeseries] reqps</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="20,556 99.39999999999999,469.0 159.0,495.0 233.5,430.0 298,456.0"/>
+<rect x="314" y="326" width="146" height="260" rx="6" fill="#fef9c3" stroke="#64748b"/>
+<text x="322" y="344" font-size="12" font-weight="bold" fill="#111">Firing alerts by category</text>
+<text x="322" y="578" font-size="10" fill="#555">[bargauge] short</text>
+<rect x="324" y="356" width="113.4" height="12" rx="3" fill="#94a3b8"/>
+<rect x="324" y="378" width="88.19999999999999" height="12" rx="3" fill="#94a3b8"/>
+<rect x="324" y="400" width="63.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="466" y="326" width="146" height="260" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="474" y="344" font-size="12" font-weight="bold" fill="#111">Rollbacks (24 h)</text>
+<text x="474" y="578" font-size="10" fill="#555">[stat] short</text>
+<text x="539.0" y="466.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="618" y="326" width="146" height="260" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="626" y="344" font-size="12" font-weight="bold" fill="#111">Deploy freeze active</text>
+<text x="626" y="578" font-size="10" fill="#555">[stat] bool</text>
+<text x="691.0" y="466.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="770" y="326" width="146" height="260" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="778" y="344" font-size="12" font-weight="bold" fill="#111">DB pool pending connections</text>
+<text x="778" y="578" font-size="10" fill="#555">[stat] short</text>
+<text x="843.0" y="466.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="10" y="592" width="450" height="260" rx="6" fill="#fef9c3" stroke="#64748b"/>
+<text x="18" y="610" font-size="12" font-weight="bold" fill="#111">Gate pass rate (24 h)</text>
+<text x="18" y="844" font-size="10" fill="#555">[bargauge] percentunit</text>
+<rect x="20" y="622" width="387.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="20" y="644" width="301.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="20" y="666" width="215.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="466" y="592" width="450" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="474" y="610" font-size="12" font-weight="bold" fill="#111">CI queue time p90</text>
+<text x="474" y="844" font-size="10" fill="#555">[timeseries] s</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="476,822 601.0,735.0 691.0,761.0 803.5,696.0 906,722.0"/>
+</svg>

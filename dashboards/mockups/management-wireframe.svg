@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 932 894" font-family="Arial,Helvetica,sans-serif">
+<rect width="932" height="894" fill="#ffffff"/>
+<text x="10" y="26" font-size="20" font-weight="bold" fill="#111">NovaPay - Management (DORA, weekly/monthly)</text>
+<text x="10" y="46" font-size="12" fill="#555">Wireframe - audience: CTO / VP Eng, refresh 5 min</text>
+<rect x="10" y="60" width="222" height="222" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="18" y="78" font-size="12" font-weight="bold" fill="#111">Deployment frequency (per day)</text>
+<text x="18" y="274" font-size="10" fill="#555">[stat] short</text>
+<text x="121.0" y="181.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="238" y="60" width="222" height="222" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="246" y="78" font-size="12" font-weight="bold" fill="#111">Lead time for changes (p50)</text>
+<text x="246" y="274" font-size="10" fill="#555">[stat] s</text>
+<text x="349.0" y="181.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="466" y="60" width="222" height="222" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="474" y="78" font-size="12" font-weight="bold" fill="#111">Change failure rate (30 d)</text>
+<text x="474" y="274" font-size="10" fill="#555">[stat] percentunit</text>
+<text x="577.0" y="181.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="694" y="60" width="222" height="222" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="702" y="78" font-size="12" font-weight="bold" fill="#111">MTTR (30 d)</text>
+<text x="702" y="274" font-size="10" fill="#555">[stat] s</text>
+<text x="805.0" y="181.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="10" y="288" width="450" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="18" y="306" font-size="12" font-weight="bold" fill="#111">Deployments per week (trend)</text>
+<text x="18" y="540" font-size="10" fill="#555">[timeseries] short</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="20,518 145.0,431.0 235.0,457.0 347.5,392.0 450,418.0"/>
+<rect x="466" y="288" width="222" height="260" rx="6" fill="#dbeafe" stroke="#64748b"/>
+<text x="474" y="306" font-size="12" font-weight="bold" fill="#111">Availability (30 d, synthetic)</text>
+<text x="474" y="540" font-size="10" fill="#555">[stat] percentunit</text>
+<text x="577.0" y="428.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="694" y="288" width="222" height="260" rx="6" fill="#dcfce7" stroke="#64748b"/>
+<text x="702" y="306" font-size="12" font-weight="bold" fill="#111">Error budget remaining (99.99% SLO)</text>
+<text x="702" y="540" font-size="10" fill="#555">[gauge] percentunit</text>
+<text x="805.0" y="428.0" font-size="26" text-anchor="middle" fill="#1e3a8a">123</text>
+<rect x="10" y="554" width="450" height="260" rx="6" fill="#f1f5f9" stroke="#64748b"/>
+<text x="18" y="572" font-size="12" font-weight="bold" fill="#111">Open Critical/High vulnerabilities</text>
+<text x="18" y="806" font-size="10" fill="#555">[timeseries] short</text>
+<polyline fill="none" stroke="#2563eb" stroke-width="2" points="20,784 145.0,697.0 235.0,723.0 347.5,658.0 450,684.0"/>
+<rect x="466" y="554" width="450" height="260" rx="6" fill="#ffedd5" stroke="#64748b"/>
+<text x="474" y="572" font-size="12" font-weight="bold" fill="#111">Rollbacks by trigger category</text>
+<text x="474" y="806" font-size="10" fill="#555">[piechart] short</text>
+<rect x="476" y="584" width="387.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="476" y="606" width="301.0" height="12" rx="3" fill="#94a3b8"/>
+<rect x="476" y="628" width="215.0" height="12" rx="3" fill="#94a3b8"/>
+</svg>
