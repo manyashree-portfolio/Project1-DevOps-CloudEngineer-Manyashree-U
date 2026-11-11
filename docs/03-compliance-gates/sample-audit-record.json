@@ -1,0 +1,16 @@
+{
+  "schema_version": "1.0",
+  "gate": "dependency",
+  "run_id": "8841",
+  "commit_sha": "a1b2c3d4e5f60718293a4b5c6d7e8f9012345678",
+  "image_digest": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "environment": "staging",
+  "actor": { "author": "dev.alice", "approvers": ["lead.bob"], "deployer": "novapay-deploy-bot" },
+  "result": "pass",
+  "thresholds": { "critical_cvss_gte": 9.0, "high_cvss_gt": 8.0, "sbom_required": true },
+  "findings_summary": { "critical": 0, "high": 0, "medium": 3, "low": 11, "report_uri": "s3://novapay-audit/8841/trivy.json" },
+  "exception_id": null,
+  "remediation_ticket": null,
+  "regulatory_refs": ["PCI-DSS 6.3", "RBI 7.2"],
+  "timestamp": "2026-11-12T09:41:07Z"
+}

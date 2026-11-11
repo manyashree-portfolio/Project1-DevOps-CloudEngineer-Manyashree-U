@@ -1,0 +1,14 @@
+# Exception request - submitted as a PR to /exceptions (CODEOWNERS: Security + Compliance). Validated by
+# pipeline/policies/exception-governance.rego. Exceptions are TIME-BOUND and AUTO-EXPIRE: after expires_at the gate applies again.
+id: EXC-2026-0042
+gate: dependency                 # sast | dast | dependency | licence | policy | infra
+finding: "CVE-2026-XXXXX (CVSS 9.1) in library foo-core 3.2.0 - no fixed version published"
+justification: "Vulnerable function not reachable (static call-graph analysis attached)."
+compensating_controls:
+  - "WAF rule blocks the exploit pattern"
+  - "Service runs in an isolated namespace with egress deny-all"
+requested_by: dev.alice
+approved_at: "2026-11-12T09:00:00Z"
+expires_at: "2026-11-14T09:00:00Z"   # <= 72 h for dependency findings
+approver_roles: [ciso]
+remediation_ticket: NP-1432
