@@ -1,0 +1,18 @@
+flowchart TB
+  U([Customers / UPI traffic]) --> GW[Istio Ingress Gateway]
+  GW --> VS{{VirtualService novapay-app<br/>atomic weight switch}}
+  VS -->|100% live| BLUE
+  VS -.->|0% / header x-novapay-preview| GREEN
+  subgraph BLUE[Namespace novapay-prod-blue - v1.8.2 - LIVE]
+    B1[Pods x6]
+  end
+  subgraph GREEN[Namespace novapay-prod-green - v1.9.0 - IDLE / NEW]
+    G1[Pods x6]
+  end
+  B1 --> SHARED
+  G1 --> SHARED
+  subgraph SHARED[Namespace novapay-shared]
+    PG[(PostgreSQL 16<br/>+ pgBouncer)]
+    RD[(Redis 7 cluster<br/>sessions)]
+    MQ[[RabbitMQ 3.13]]
+  end

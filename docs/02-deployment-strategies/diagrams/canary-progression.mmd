@@ -1,0 +1,15 @@
+flowchart LR
+  S([Signed image approved]) --> P1[Phase 1: Canary<br/>1-2% traffic - 10 min std / 15 min full]
+  P1 --> A1{Analysis<br/>errors < 0.1%<br/>p99 < 200 ms<br/>Welch + chi-squared}
+  A1 -->|fail| RB[(Auto-rollback<br/>weight to 0%)]
+  A1 -->|pass| P2[Phase 2: Early adopter<br/>5-10% - 10 min std / 30 min full]
+  P2 --> A2{errors < 0.05%<br/>no critical alerts}
+  A2 -->|fail| RB
+  A2 -->|pass| P3[Phase 3: Expansion<br/>25-50% - 15 min std / 60 min full]
+  P3 --> A3{All SLOs met<br/>no degradation vs baseline<br/>composite score >= 90}
+  A3 -->|fail| RB
+  A3 -->|hold 70-90| P3
+  A3 -->|pass| P4[Phase 4: Full rollout 100%]
+  P4 --> BAKE[24 h bake - SLO compliance]
+  BAKE --> OK([Mark deployment stable])
+  RB --> INC[Incident playbook + post-mortem]
