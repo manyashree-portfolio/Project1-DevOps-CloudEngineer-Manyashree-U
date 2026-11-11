@@ -1,0 +1,23 @@
+flowchart LR
+  IMG([One signed image digest]) --> DEV
+  subgraph DEV[DEV - synthetic data]
+    D1[Auto deploy on PR merge]
+  end
+  DEV -->|unit 100%, coverage 80/70, SAST, signed + SemVer<br/>AUTOMATIC| STG
+  subgraph STG[STAGING - anonymised data]
+    S1[Integration + contract, DAST, perf 2x load]
+  end
+  STG -->|all gates + Tech Lead approval<br/>MANUAL 1| PRE
+  subgraph PRE[PRE-PROD - masked data subset]
+    P1[UAT, compliance verification, migration rehearsal 100M rows]
+  end
+  PRE -->|UAT sign-off + RBI/PCI gates + runbook + CAB<br/>Release Manager AND SRE Lead<br/>MANUAL 2 + 3| PRD
+  subgraph PRD[PRODUCTION - real data]
+    R1[Canary or blue-green]
+  end
+  PRD --> OK([Stable after bake])
+  CFG[(Config only changes:<br/>values.yaml > env override > service override)] -.-> DEV
+  CFG -.-> STG
+  CFG -.-> PRE
+  CFG -.-> PRD
+  HOT([Hotfix path: all gates, expedited approvals]) -.-> STG
